@@ -1,0 +1,20 @@
+schema_version: '1.0'
+type: 'DB_TABLE'
+name: {{db_table_name}}_get_raw_data_init_yaml
+data_source_type: GENERIC
+source_system: TSEH
+data_capture_mode: snapshot
+where_clause: "table_name = '{{mrod_table_name}}' and lower((row_data ->> 'UPLOAD_MODE')::text)!='delete'"
+columns:
+  - name: file_name
+    type: TEXT
+  - name: row_num
+    type: INTEGER
+  - name: row_data
+    type: JSONB
+  - name: upload_date
+    type: TIMESTAMP
+  - name: table_name
+    type: TEXT
+  - name: uniq_num
+    type: TEXT

@@ -1,0 +1,70 @@
+name: wf_raw_data_{{table_name}}_init
+type: WORK_FLOW
+schema_version: '1.12'
+version: 1
+tags:
+  - get_raw_data
+  - wf_raw_data_{{table_name}}_init
+orientation: TB
+sources:
+  - short_name: fct_i_p
+    type: DB_TABLE
+    object: {{table_name}}_get_raw_data_init_yaml
+    resource_cd: tseh.public.{{table_name}}
+targets:
+  - short_name: mart_fct_i_p
+    schema: {{ table_schema }}
+    table: mart_mrod_get_raw_data
+    resource_cd: ceh.rd_rawd.mart_{{table_name}}
+local_metrics:
+  wf_max_date_to:
+    target: stage_T_input
+    query: |
+      coalesce(
+        max(upload_date):: TIMESTAMP,
+        '1999-12-12' :: TIMESTAMP
+      )
+mappings:
+  marts:
+    - short_name: mart_fct_i_p
+      algorithm_uid: '{{table_name}}'
+      algorithm_uid_2: '1'
+      target: mart_fct_i_p
+      source: fct_i_p
+      delta_mode:
+        delta_mode: new
+        partial_update:
+          where_clause: table_name = '{{table_name_upper}}'
+      where_clause: |
+      field_map:
+        file_name:
+          type: column
+          value: file_name
+        row_num:
+          type: column
+          value: row_num
+        row_data:
+          type: column
+          value: row_data
+        upload_date:
+          type: column
+          value: upload_date
+        table_name:
+          type: column
+          value: table_name
+        uniq_num:
+          type: column
+          value: uniq_num
+        # deleted_from_src:
+        #   type: column
+        #   value: deleted_from_src
+        # deleted_flg:
+        #   type: sql_expression
+        #   value: >
+        #     case when lower((row_data ->> 'UPLOAD_MODE')::text)='delete' or deleted_from_src = 1 then true else false end
+        #   field_type: BOOLEAN
+      metrics:
+        by_src:
+          - wf_max_date_to
+      ref_map: []
+      hub_map: []
