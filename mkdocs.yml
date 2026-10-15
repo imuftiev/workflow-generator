@@ -1,0 +1,12 @@
+site_name: PXF YAML Generator
+site_description: Генерация YAML-конфигураций из Excel
+
+theme:
+  name: material
+  language: ru
+
+nav:
+  - Главная: index.md
+  - Установка: installation.md
+  - Использование: usage.md
+  - Архитектура: architecture.md
