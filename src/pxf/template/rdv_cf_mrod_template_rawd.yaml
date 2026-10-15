@@ -1,0 +1,606 @@
+﻿schema_version: 2.0
+metadata:
+  author: Titov Nikolay
+  version: "1.0"
+  description: |
+    Шаблон мастер потока для источник МРОД
+  tags: []
+  group: dm_rawd
+  package_id: rdv_cf_mrod_template_rawd
+  main_flows: []
+flows:
+  - id: cf_mrod_template
+    builder: ceh_core_idl.app.builders.simple_flow_builder
+    tags:
+      - "rdv"
+      - "uni"
+      - "cf"
+      - "mrod"
+      - "team: rdv"
+      - "uid: n/a"
+      - "src: uni"
+      - "tgt: rdv"
+      - "area: n/a"
+      - "prv: ods"
+      - "rls: n/a"
+    description: Шаблон управляющего потока МРОД.
+    metadata:
+      # Маппинг алгоритмов формата:
+      #
+      #   2.ZI2.288:
+      #     - ceh: ceh.rdv.lsat_restriction_fintool_cftm
+      #       uni: ods.CFT2MAIN_SOH.H2_Z#RKO_LIMIT_PAY
+      #
+      - name: algos_map
+        type: in
+      # Условие запуска рабочего потока.
+      # ANY - запускать при изменении любого из источников любого алгоритма
+      # ALL - запускать при изменении всех из источников всех алгоритмов
+      - name: mode
+        type: in
+        default: ANY
+      # Префикс метрики дата актуализации данных ресурса относительно указанного источника.
+      # См. https://wiki.corp.dev.vtb/pages/viewpage.action?pageId=1915691580
+      # Например, если метрика cftm_actual_dttm, то префикс будет cftm.
+      # В случае отсутствия таковой метрики на источнике, указывается пустая строка
+      - name: actual_dttm_prefix
+        type: in
+        default: 'tseh'
+      # Маппинг код ресурса на префикс (см. actual_dttm_prefix):
+      #
+      #   actual_dttm_prefixes:
+      #     "ods.CFT2MAIN_SOH.H2_Z#RKO_LIMIT_PAY": cftm
+      #
+      # если источника нет в этом списке, то будет использовать для него значение из actual_dttm_prefix
+      - name: actual_dttm_prefixes
+        type: in
+        default: {}
+      # Имя рабочего потока, который требуется запустить в случае появления изменений на источнике.
+      - name: work_flow_id
+        type: in
+      # Имя рабочего потока, который требуется запустить в случае появления признака инит-загрузки на источнике.
+      - name: init_work_flow_id
+        type: in
+      # Название метрики, которую вычисляет рабочий поток во время своей работы и записывает в "result".
+      # Значение этой метрики используется в качестве левой границы отбора.
+      # Относительно данной метрики вычисляется необходимость запуска рабочего потока.
+      # Метрика должна содержать формат, который может сравнить jq.
+      # - integer
+      # - float
+      # - bool
+      # - string
+      # - Дата в формате ISO
+      - name: wf_metric
+        type: in
+        default: wf_dataset_max_date_to
+      # Название метрики в ресурсе uni провайдера, значение которой используется
+      # в качестве правой границы отбора. Должна иметь тот же тип, что и wf_metric.
+      - name: cf_metric
+        type: in
+        default: dataset_max_date_to
+      # Название метрики в ресурсе uni провайдера, значение которой используется
+      # в качестве определения необходимости init-загрузки.
+      - name: init_metric
+        type: in
+        default: src_init_load_date
+      # Название параметра левой границы для рабочего потока
+      - name: left_bound
+        type: in
+        default: wf_max_date_from
+      # Название параметра правой границы для рабочего потока
+      - name: right_bound
+        type: in
+        default: wf_max_date_to
+      # Значение по умолчанию для метрики из рабочего потока (wf_metric).
+      # Используется для первой загрузки алгоритма в приемник.
+      - name: default_value
+        type: in
+        default: "1899-12-31T23:59:59"
+      # Максимальное время ожидания изменений состояний источников в секундах.
+      - name: timeout
+        type: in
+        datatype: float
+        default: 1800.0
+      # Количество попыток для проверки изменений состояний источников
+      - name: retry_cnt
+        type: in
+        datatype: int
+        default: 0
+      # Ожидания между попытками проверки изменений состояний источников
+      - name: retry_delay_duration
+        type: in
+        datatype: int
+        default: PT120S
+      # Режим запуска рабочего потока.
+      # delta - инкремент
+      # init - инициализирующая выгрузка
+      # manual - ручной запуск
+      - name: execution_mode
+        type: in
+        default: delta
+      # Изменяемые параметры рабочего потока
+      - name: changed_parameters
+        type: in
+        datatype: dict
+        default: null
+      # Jq выражение для изменения параметров
+      # По умолчанию изменяет правую границу cf_metric на переданный right_bound
+      - name: changed_parameters_jq
+        type: in
+        datatype: str
+        default: .changed_parameters.right_bound as $right_bound | .cf_metric as $cf_metric | .wf_metric as $wf_metric | (.parameters[].by_src[] | [(if (select(.[$cf_metric] < $right_bound) // null) then 0 else 1 end), (if (select(.[$wf_metric] >= $right_bound) // null) then 0 else 1 end)]) as $check_right_bound | .changed_parameters.max_interval_period as $max_interval_period | ((.parameters[].by_src[] | .[$wf_metric]) | ((split(".")[0] | strptime("%Y-%m-%dT%H:%M:%S"))? // strptime("%Y-%m-%dT%H:%M:%S")) | .[3] += 12 | mktime | gmtime | .[2] += $max_interval_period | .[3] = 0 | .[4] = 0 | .[5] = 0 | mktime | strftime("%FT%T")) as $update_cf_metric_by_incriment | (.parameters[].by_src[] | .[$cf_metric]) as $right_bound_default | (.parameters[].by_src[] | .[$cf_metric]) |= (if (($update_cf_metric_by_incriment < $right_bound_default) and ($max_interval_period != null)) then $update_cf_metric_by_incriment else $right_bound_default end) | (.parameters[].by_src[] | .[$cf_metric]) as $updated_cf_metric | (.parameters[].by_src[] | .[$cf_metric]) |= (if ($check_right_bound[0] == 1 and $check_right_bound[1] == 1) then $right_bound else $updated_cf_metric end) | .parameters
+      # Jq выражение для проверки возможности изменения параметров
+      # Результат проверки возвращается в виде списка из двух значений Правой и Левой границ: [right_bound, left_bound, zod_params]
+      # Переменные right_bound, left_bound могут быть либо 0, либо 1 в зависимости прошла проверка или нет
+      # Переменная zod_params может быть либо 0, либо 1 в зависимости наличия запуска в режиме ЗОД
+      # Возможно 3 режима работы (передаются в ответе):
+      # [1,1] - Вариант 1: правая граница заменяется так как находится внутри правой и левой границ
+      #         Вариант 2: передано значение max_interval_period
+      # [0,1] - поток останавливается с ошибкой, так как переданная правая граница больше существующей
+      # [1,0] - поток помечается успешно выполненным, так как передана правая граница меньше существующей левой (правая граница не обновляется)
+      - name: check_parameters_jq
+        type: in
+        datatype: str
+        default: .changed_parameters.right_bound as $right_bound | .changed_parameters.max_interval_period as $max_interval_period | .cf_metric as $cf_metric | .wf_metric as $wf_metric | .zod_parameters as $zod | .parameters[].by_src[] | [(if (select(.[$cf_metric] < $right_bound) // null) then (if ($max_interval_period==null) then 0 else 1 end) else 1 end), (if (select(.[$wf_metric] >= $right_bound) // null) then (if ($max_interval_period==null) then 0 else 1 end) else 1 end), if ($zod | length > 0) then 1 else 0 end]
+      # Сообщение об ошибке, выводимое в случае остановки потока из-за невозможности изменения параметров
+      - name: check_parameters_err_msg
+        type: in
+        datatype: str
+        default: Правая граница, определенная потоком меньше переданной на вход для изменения
+    tasks:
+      - id: check_job_running
+        type: ceh_core_idl.app.operators.core.check_job_running
+        description: Проверка состояние текущего дага    
+      - id: validate_params
+        description: Проверяет корректность значений входных параметров.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            mode: ${mode}
+            execution_mode: ${execution_mode}
+          fetch_type: first
+          jq_expression: |
+            [
+            (select ([.mode | test("^ALL$", "^ANY$")] | any | not) | "Ошибка значения параметра mode. Возможные значения: ANY, ALL."),
+            (select ([.execution_mode | test("^delta$", "^init\\w{0,2}$", "^manual\\w{0,4}$")] | any | not) | "Ошибка значения параметра execution_mode. Возможные значения: delta, init\\w{0,2}, manual\\w{0,4}.")
+            ]
+        sequencer:
+          dependencies:
+            - ref: check_job_running
+      - id: read_algos_map
+        description: Выбирает из настроек потока списки кодов ресурсов CEH и UNI.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            algos_map: ${algos_map}
+            actual_dttm_prefix: ${actual_dttm_prefix}
+            actual_dttm_prefixes: ${actual_dttm_prefixes}
+            execution_mode: ${execution_mode}
+          fetch_type: first
+          jq_expression: |
+            .actual_dttm_prefix as $actual_dttm_prefix
+            | .actual_dttm_prefixes as $actual_dttm_prefixes
+            | .execution_mode as $execution_mode
+            | ([.algos_map[][].uni] | unique) as $uni
+            | .algos_map
+            | {
+                uni: $uni,
+                ceh: ([.[][].ceh ] | unique),
+                source_map: (to_entries | map({
+                  uid: (
+                      if ($execution_mode|startswith("delta")|not) then (.key + ":" + $execution_mode)
+                      else .key end
+                  ),
+                  src: .value[].uni
+                }) | unique),
+                actual_dttm_prefixes: (
+                  $uni
+                  | map({key: ., value: (($actual_dttm_prefixes[.] // $actual_dttm_prefix) | ascii_downcase)})
+                  | from_entries
+                )
+              }
+        sequencer:
+          dependencies:
+            - ref: validate_params
+              condition: ${validate_params.status and not (validate_params.jq_response | length)}
+      - id: invalid_params_error
+        description: Останавливает поток в случае, если заданы неверные значения параметров.
+        type: ceh_core_idl.app.operators.core.error_operator
+        properties:
+          exit_code: 1
+          exit_message: "${validate_params.jq_response}."
+        sequencer:
+          dependencies:
+            - ref: validate_params
+              condition: ${validate_params.status and (validate_params.jq_response | length)}
+      - id: get_ceh_states
+        description: Получает полные состояния ресурсов CEH.
+        type: ceh_core_idl.app.operators.services.get_state_operator
+        properties:
+          resource_ids: ${read_algos_map.jq_response.ceh}
+          jq_expression: .
+          deleted_keys:
+            - resource_cd
+        sequencer:
+          dependencies:
+            - ref: read_algos_map
+      - id: extract_metric_from_ceh_states
+        description: Считывает ключевую метрику results.by_src.* из состояний ресурсов CEH.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            states: ${get_ceh_states.compiled_states}
+            metric: ${wf_metric}
+          fetch_type: first
+          jq_expression: |
+            .metric as $metric
+            | [
+                .states[]
+                | select(has("last_sources")).last_sources
+                | del(.transition) 
+                | to_entries
+                | .[]
+                | {
+                    algo: .key,
+                    by_src: (.value.results.by_src | to_entries)[]
+                  }
+                | {
+                    algo: .algo,
+                    src: .by_src.key,
+                    metric: .by_src.value[$metric]
+                  }
+              ]
+            | group_by(.algo, .src)
+            | map({
+                algo: .[0].algo,
+                key: .[0].src,
+                value: (map(.metric) | values  | max)
+              })
+            | group_by(.algo)
+            | map({
+                key: .[0].algo,
+                value: from_entries
+              })
+            | from_entries
+        sequencer:
+          dependencies:
+            - ref: get_ceh_states
+      - id: get_uni_states
+        description: Получает состояния uni-ресурсов.
+        type: ceh_core_idl.app.operators.services.get_state_operator
+        properties:
+          resource_ids: ${read_algos_map.jq_response.uni}
+          compile_format: dict
+          resource_provider: uni
+          jq_expression: .
+        sequencer:
+          dependencies:
+            - ref: extract_metric_from_ceh_states
+      - id: validate_uni_states
+        description: Проверяет наличие метрик в состояниях UNI ресурсов.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            uni: ${get_uni_states.compiled_states}
+            uni_list: ${read_algos_map.jq_response.uni}
+            actual_dttm_prefixes: ${read_algos_map.jq_response.actual_dttm_prefixes}
+            cf_metric: ${cf_metric}
+            init_metric: ${init_metric}
+          fetch_type: first
+          jq_expression: |
+            .cf_metric as $cf_metric
+            | .init_metric as $init_metric
+            | .uni_list as $all
+            | .actual_dttm_prefixes as $actual_dttm_prefixes
+            | .uni
+            | to_entries
+            | [
+                (
+                  .[]
+                  | select(.value | has($cf_metric) | not)
+                  | "Ресурс " + .key + " не содержит метрику " + $cf_metric
+                ),
+                (
+                  .[]
+                  | select(.value | has($init_metric) | not)
+                  | "Ресурс " + .key + " не содержит init метрику " + $init_metric
+                ),
+                (
+                  .[]
+                  | $actual_dttm_prefixes[.key] as $actual_dttm_prefix
+                  | select(
+                      ($actual_dttm_prefix | length) > 0
+                      and
+                      (.value | has($actual_dttm_prefix + "_actual_dttm") | not)
+                    )
+                  | "Ресурс " + .key + " не содержит метрику " + $actual_dttm_prefix + "_actual_dttm"
+                ),
+                (
+                  map(.key) as $loaded
+                  | $all - $loaded
+                  | .[]
+                  | "Для ресурса " + . + " не получено состояние"
+                )
+              ]
+              | unique
+        sequencer:
+          dependencies:
+            - ref: get_uni_states
+      - id: invalid_uni_states_error
+        description: Останавливает поток в случае, если в состояниях UNI ресурсов есть проблемы.
+        type: ceh_core_idl.app.operators.core.error_operator
+        properties:
+          exit_code: 1
+          exit_message: "${validate_uni_states.jq_response}."
+        sequencer:
+          dependencies:
+            - ref: validate_uni_states
+              condition: ${validate_uni_states.status and (validate_uni_states.jq_response | length)}
+      - id: await_changes
+        description: |
+          Определяет появились ли изменения на источниках относительно последней даты загрузки в CEH.
+        type: ceh_core_libs.steps.services.wait_resource_state_step
+        properties:
+          resource_cds: ${read_algos_map.jq_response.uni}
+          resource_provider: uni
+          reference_data:
+            mode: ${mode}
+            source_map: ${read_algos_map.jq_response.source_map}
+            ceh: ${extract_metric_from_ceh_states.jq_response}
+            ceh_states: ${get_ceh_states.compiled_states}
+            metric: ${cf_metric}
+            default_value: ${default_value}
+          retry_cnt: ${retry_cnt}
+          retry_delay_duration: ${retry_delay_duration}
+          jq_expression: |
+            (
+                if .reference_data.mode == "ALL"
+                then (.reference_data.source_map | length)
+                else 1
+                end
+            )  as $required
+            | .reference_data.ceh as $ceh
+            | .reference_data.metric as $metric
+            | .reference_data.default_value as $default_value
+            | .states as $uni
+            | [
+                .reference_data.source_map[]
+                | {
+                    current: ($uni[.src][$metric] // $default_value),
+                    loaded: ($ceh[.uid][.src] // $default_value)
+                  }
+                | select(.current > .loaded)
+              ]
+            | length >= $required
+        sequencer:
+          dependencies:
+            - ref: validate_uni_states
+              condition: ${validate_uni_states.status and not (validate_uni_states.jq_response | length)}
+      - id: dont_new_uni_date
+        description: Успешно завершаем управляющий поток не запуская рабочий в случае, на источнике нет новых данных
+        type: ceh_core_idl.app.operators.core.log_operator
+        properties:
+          log_level: info
+          message: "Нет новых данных."
+        sequencer:
+          dependencies:
+            - ref: await_changes
+              condition: ${await_changes.status and not await_changes.result.status}
+      - id: checking_init_flag
+        description: |
+          Определяет появился ли признак инит-загрузки на источниках относительно последней даты загрузки в CEH.
+        type: ceh_core_libs.steps.services.wait_resource_state_step
+        properties:
+          resource_cds: ${read_algos_map.jq_response.uni}
+          resource_provider: uni
+          reference_data:
+            mode: ${mode}
+            source_map: ${read_algos_map.jq_response.source_map}
+            ceh: ${extract_metric_from_ceh_states.jq_response}
+            ceh_states: ${get_ceh_states.compiled_states}
+            metric: ${init_metric}
+            default_value: ${default_value}
+          retry_cnt: ${retry_cnt}
+          retry_delay_duration: ${retry_delay_duration}
+          jq_expression: |
+            (
+                if .reference_data.mode == "ALL"
+                then (.reference_data.source_map | length)
+                else 1
+                end
+            )  as $required
+            | .reference_data.ceh as $ceh
+            | .reference_data.metric as $metric
+            | .reference_data.default_value as $default_value
+            | .states as $uni
+            | [
+                .reference_data.source_map[]
+                | {
+                    current: ($uni[.src][$metric] // $default_value),
+                    loaded: ($ceh[.uid][.src] // $default_value)
+                  }
+                | select(.current > .loaded)
+              ]
+            | length >= $required
+        sequencer:
+          dependencies:
+            - ref: await_changes
+              condition: ${await_changes.status and await_changes.result.status}
+      - id: get_final_uni_states
+        description: Получает состояния uni-ресурсов.
+        type: ceh_core_idl.app.operators.services.get_state_operator
+        properties:
+          resource_ids: ${read_algos_map.jq_response.uni}
+          compile_format: dict
+          resource_provider: uni
+          jq_expression: .
+        sequencer:
+          dependencies:
+            - ref: checking_init_flag
+      - id: build_algos_params
+        description: Строит параметры рабочего потока в разделе algos.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            uni: ${get_final_uni_states.compiled_states}
+            ceh: ${extract_metric_from_ceh_states.jq_response}
+            algos: ${algos_map}
+            metric: ${wf_metric}
+            cf_metric: ${cf_metric}
+            default_value: ${default_value}
+            execution_mode: ${execution_mode}
+            left_bound: ${left_bound}
+            right_bound: ${right_bound}
+          fetch_type: first
+          jq_expression: |
+            .metric as $metric
+            | .cf_metric as $cf_metric
+            | .left_bound as $left_bound
+            | .right_bound as $right_bound
+            | .ceh as $ceh
+            | .default_value as $default_value
+            | .uni as $uni
+            | .execution_mode as $execution_mode
+            | .algos
+            | to_entries
+            | map(
+                (
+                  if ($execution_mode|startswith("delta")|not) then (.key + ":" + $execution_mode)
+                  else .key end
+                ) as $uid
+                | {
+                    key: .key, #пишем раздел с именем алгоритма из полученного algos_map
+                    value: {
+                      by_src: (
+                        [.value[].uni] #берем раздел 'uni: {' 
+                        | unique
+                        | map({ #скаинируем по всем источникам в uni
+                            key: ., #пишем все ключи из источника в uni
+                            value: ($uni[.] 
+                            +( # + пишем метрику юни как правую границу с названием параметра
+                              [{          
+                                key: $right_bound, 
+                                value: ($uni[.][$cf_metric])
+                              }]
+                              | from_entries # переводим в строковый вид пару ключ:значение
+                             )
+                            +( # + пишем метрику цеха для этого (если имя метрики совпадает с именем метрики в юни, то перепишется цеховой, поэтому меняем на имена параметров)
+                              [{          
+                                key: $left_bound, 
+                                value: ($ceh[$uid][.] // $default_value)
+                              }]
+                              | from_entries # переводим в строковый вид пару ключ:значение
+                             )
+                            )
+                        })
+                        | from_entries
+                      ),
+                      common: {}
+                    }
+                }
+              )
+              | from_entries
+        sequencer:
+          dependencies:
+            - ref: get_final_uni_states
+      - id: build_ceh_wf_params
+        description: Строит параметры рабочего потока в разделе ceh_wf_params.
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            snapshot_effective_date: ${airflow_execution_date | dt_format('%Y-%m-%dT00:00:00')}
+            init_flag: ${checking_init_flag.result.status}
+          fetch_type: first
+          jq_expression: |
+            .init_flag as $init_flag
+            | if ($init_flag|not) then {} else ({snapshot_effective_date}) end
+        sequencer:
+          dependencies:
+            - ref: build_algos_params
+      - id: validate_change_params
+        description: Проверяет возможность изменения параметров
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            cf_metric: ${cf_metric}
+            wf_metric: ${wf_metric}
+            changed_parameters: ${airflow_conf.changed_parameters or changed_parameters}
+            zod_parameters: ${airflow_conf.zod}
+            parameters: ${build_algos_params.jq_response}
+          fetch_type: first
+          jq_expression: ${airflow_conf.check_parameters_jq or check_parameters_jq}
+        sequencer:
+          dependencies:
+            - ref: build_ceh_wf_params
+              condition: ${build_ceh_wf_params.status and not checking_init_flag.result.status and (airflow_conf.changed_parameters or changed_parameters)}
+      - id: change_params_skipped
+        description: Успешно завершаем управляющий поток не запуская рабочий в случае, если правая граница пришла меньше левой
+        type: ceh_core_idl.app.operators.core.log_operator
+        properties:
+          log_level: info
+          message: "{%- if not validate_change_params.jq_response[1] %}\
+                      {%- set message = 'Переданная правая граница меньше определенной в потоке левой' %}\
+                    {%- else %}\
+                      {%- set message = 'Переданная правая граница больше определенной в потоке правой' %}\
+                    {%- endif %}\
+                    ${message}"
+        sequencer:
+          dependencies:
+            - ref: validate_change_params
+              condition: ${validate_change_params.status and (not validate_change_params.jq_response[1] or not validate_change_params.jq_response[0])}
+      - id: change_params
+        description: Изменяет параметры
+        type: ceh_core_idl.app.operators.core.json_query_operator
+        properties:
+          input_data:
+            cf_metric: ${cf_metric}
+            wf_metric: ${wf_metric}
+            changed_parameters: ${airflow_conf.changed_parameters or changed_parameters}
+            parameters: ${build_algos_params.jq_response}
+          fetch_type: first
+          jq_expression: ${airflow_conf.changed_parameters_jq or changed_parameters_jq}
+        sequencer:
+          dependencies:
+            - ref: validate_change_params
+              condition: ${validate_change_params.status and validate_change_params.jq_response[1] and validate_change_params.jq_response[0]}
+      - id: trigger_work_flow
+        description: Запускает рабочий поток.
+        type: ceh_core_idl.app.operators.core.trigger_dag_operator
+        properties:
+          trigger_dag_id: ${work_flow_id}
+          conf:
+            algos: ${change_params.jq_response if change_params.status else build_algos_params.jq_response}
+            ceh_wf_params: ${build_ceh_wf_params.jq_response}
+            zod: ${"" if (validate_change_params.status and validate_change_params.jq_response[1] and not validate_change_params.jq_response[0] and validate_change_params.jq_response[2]) else airflow_conf.zod}
+          wait_for_completion: false
+        sequencer:
+          dependencies:
+            - ref: change_params
+              condition: ${build_ceh_wf_params.status and (change_params.status or change_params.status is none)}
+          condition: all and ${(checking_init_flag.status and not checking_init_flag.result.status) and ((validate_change_params.status and validate_change_params.jq_response[1]) or (validate_change_params.status is none))}
+      - id: trigger_work_flow_init
+        description: Запускает рабочий поток инит-загрузки.
+        type: ceh_core_idl.app.operators.core.trigger_dag_operator
+        properties:
+          trigger_dag_id: ${init_work_flow_id}
+          conf: 
+            algos: ${build_algos_params.jq_response}
+            ceh_wf_params: ${build_ceh_wf_params.jq_response}
+            zod: ${airflow_conf.zod}
+          wait_for_completion: false
+        sequencer:
+          dependencies:
+            - ref: build_ceh_wf_params
+              condition: ${build_ceh_wf_params.status and (checking_init_flag.status and checking_init_flag.result.status)}
+      - id: finish
+        description: Управляющий поток завершен
+        type: ceh_core_idl.app.operators.core.log_operator
+        properties:
+          log_level: info
+          message: "Управляющий поток завершен"
+        sequencer:
+          dependencies:
+            - ref: trigger_work_flow
+            - ref: trigger_work_flow_init
+            - ref: dont_new_uni_date
+          condition: any
