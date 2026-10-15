@@ -6,12 +6,10 @@ import logging
 # Название excel-файла, список потоков
 excel_file = "cf_list"
 
-input_data = f"pxf/input_data/{excel_file}.xlsx"
-cf_output = "pxf/output_data/cf/"
-db_output = "pxf/output_data/db_table/"
-wf_init_output = "pxf/output_data/wf_init/"
-
-output = [cf_output, db_output, wf_init_output]
+input_data = f"src/pxf/input_data/{excel_file}.xlsx"
+cf_output = "src/pxf/output_data/cf/"
+db_output = "src/pxf/output_data/db_table/"
+wf_init_output = "src/pxf/output_data/wf_init/"
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -25,7 +23,7 @@ log.addHandler(log_stream)
 
 flows = []
 
-file_template = FileSystemLoader("pxf/template")
+file_template = FileSystemLoader("src/pxf/template")
 env = Environment(loader=file_template)
 
 cf_template = env.get_template("cf_mrod_flow_template.yaml")
@@ -33,17 +31,12 @@ db_template = env.get_template("db_table_template.yaml")
 wf_template = env.get_template("wf_init_template.yaml")
 
 
-def clear() -> None:
-    try:
-        log.info(f"Очистка файлов в директориях: {cf_output}, {db_output}, {wf_init_output} ...")
-        for f in output:
-            shutil.rmtree(f)
-            os.mkdir(f)
-
-    except FileNotFoundError:
-        log.error(f"Директорий {cf_output}, {db_output}, {wf_init_output} не существует, создаем")
-        for f in output:
-            os.mkdir(f)
+def clear(output: list[str]) -> None:
+    for directory in output:
+        if os.path.exists(directory):
+            shutil.rmtree(directory)
+        os.makedirs(directory, exist_ok=True)
+    log.info(f"Директории созданы: {cf_output}, {db_output}, {wf_init_output}")
 
 
 def parse_excel(filepath: str, sheet_name='Sheet1') -> None:
@@ -74,7 +67,7 @@ def generate_control_flows() -> None:
 
 
 def generate_work_flows() -> None:
-    rows = pd.read_excel("pxf/input_data/cf_list.xlsx")
+    rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
     for row in range(len(rows)):
         flow = rows["Flows"][row]
         index = str(rows["Flows"][row]).find("mrod_")  # 12
@@ -91,21 +84,25 @@ def generate_work_flows() -> None:
 
 
 def generate_db_table() -> None:
-    rows = pd.read_excel("pxf/input_data/cf_list.xlsx")
-    for file in range(len(rows)):
-        for row in rows.itertuples(index=False):
-            name = row[0][12:]
-            with open(f"{db_output}{name}_get_raw_data_init_yaml.yaml", "w+") as f:
-                f.write(
-                    db_template.render(
-                        db_table_name=name,
-                        mrod_table_name=str.upper(name[5:])
-                    )
+    rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
+    for row in rows.itertuples(index=False):
+        name = row[0][12:]
+        with open(f"{db_output}{name}_get_raw_data_init_yaml.yaml", "w+") as f:
+            f.write(
+                db_template.render(
+                    db_table_name=name,
+                    mrod_table_name=str.upper(name[5:])
                 )
+            )
 
 
-clear()
-parse_excel(input_data)
-generate_control_flows()
-generate_work_flows()
-generate_db_table()
+def main():
+    clear([cf_output, wf_init_output, db_output])
+    parse_excel(input_data)
+    generate_control_flows()
+    generate_work_flows()
+    generate_db_table()
+
+
+if __name__ == "__main__":
+    main()

@@ -8,4 +8,5 @@ src/pxf/template/
 src/pxf/input_data/
 .env
 /__pycache__/
+src/pxf/__pycache__/
 .pyc
