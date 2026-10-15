@@ -18,10 +18,16 @@ dependencies = [
     "python-dotenv (==1.2.4)",
     "six (==1.17.0)",
     "tzdata (==2026.5)",
-    "pytest (>=9.1.1,<10.0.0)"
+    "pytest (>=9.1.1,<10.0.0)",
+    "mkdocstrings[python] (>=1.0.7,<2.0.0)"
 ]
 
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "mkdocs-material (>=9.7.7,<10.0.0)"
+]

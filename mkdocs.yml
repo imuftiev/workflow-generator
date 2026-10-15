@@ -1,0 +1,21 @@
+site_name: PXF YAML Generator
+site_description: Генерация YAML-конфигураций из Excel
+
+theme:
+  name: material
+  language: ru
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - .
+          options:
+            docstring_style: google
+            show_source: true
+            show_signature: true
+            show_signature_annotations: true
+            show_root_heading: true
+            members_order: source
