@@ -1,0 +1,26 @@
+[project]
+name = "flowgen-script"
+version = "1.0.0"
+description = "Workflows generator (yaml template parser)."
+authors = [
+    {name = "imn"}
+]
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "dotenv (==0.9.9)",
+    "jinja2 (==3.1.6)",
+    "markupsafe (==3.0.4)",
+    "numpy (==2.5.4)",
+    "pandas (==3.0.6)",
+    "python-dateutil (==2.9.0.post0)",
+    "python-dotenv (==1.2.4)",
+    "six (==1.17.0)",
+    "tzdata (==2026.5)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

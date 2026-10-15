@@ -1,0 +1,11 @@
+.venv
+.idea
+src/meteor/input_data/
+src/meteor/template/
+src/meteor/output_data/
+src/pxf/output_data/
+src/pxf/template/
+src/pxf/input_data/
+.env
+/__pycache__/
+.pyc
