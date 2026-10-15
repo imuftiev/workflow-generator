@@ -21,8 +21,6 @@ log_stream.setFormatter(formatter)
 
 log.addHandler(log_stream)
 
-flows = []
-
 file_template = FileSystemLoader("src/pxf/template")
 env = Environment(loader=file_template)
 
@@ -39,14 +37,14 @@ def clear(output: list[str]) -> None:
     log.info(f"Директории созданы: {cf_output}, {db_output}, {wf_init_output}")
 
 
-def parse_excel(filepath: str, sheet_name='Sheet1') -> None:
+def parse_excel(filepath: str, sheet_name='Sheet1') -> list[str]:
     df = pd.read_excel(filepath, sheet_name)
-    [flows.append(x) for x in df["Flows"]]
     log.info("Список потоков для перевода на шаблон yaml:")
-    [log.info(x) for x in flows]
+    [log.info(x) for x in df["Flows"]]
+    return df["Flows"].tolist()
 
 
-def generate_control_flows() -> None:
+def generate_control_flows(flows: list[str]) -> None:
     for flow in flows:
         dag_id = str(flow)
         work_flow_id = "wf_" + flow[3:]
@@ -98,8 +96,8 @@ def generate_db_table() -> None:
 
 def main():
     clear([cf_output, wf_init_output, db_output])
-    parse_excel(input_data)
-    generate_control_flows()
+    flows = parse_excel(input_data)
+    generate_control_flows(flows)
     generate_work_flows()
     generate_db_table()
 
