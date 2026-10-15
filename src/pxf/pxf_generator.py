@@ -30,6 +30,18 @@ wf_template = env.get_template("wf_init_template.yaml")
 
 
 def clear(output: list[str]) -> None:
+    """
+        Очищает выходные директории генератора.
+
+        Для каждой директории удаляет существующее содержимое
+        и создаёт пустую директорию для новых YAML-файлов.
+
+        Args:
+            output: Список путей к выходным директориям.
+
+        Returns:
+            None.
+    """
     for directory in output:
         if os.path.exists(directory):
             shutil.rmtree(directory)
@@ -38,6 +50,15 @@ def clear(output: list[str]) -> None:
 
 
 def parse_excel(filepath: str, sheet_name='Sheet1') -> list[str]:
+    """
+        Парсит excel файл и возвращает список наименований потоков.
+        Args:
+            filepath: Путь к файлу excel.
+            sheet_name: Страница из файла excel которую нужно обработать
+
+        Returns:
+            list[str].
+    """
     df = pd.read_excel(filepath, sheet_name)
     log.info("Список потоков для перевода на шаблон yaml:")
     [log.info(x) for x in df["Flows"]]
@@ -45,6 +66,14 @@ def parse_excel(filepath: str, sheet_name='Sheet1') -> list[str]:
 
 
 def generate_control_flows(flows: list[str]) -> None:
+    """
+            Создает управляющие потоки из списка потоков.
+            Args:
+                flows: Список наименований потоков, которые будут созданы
+
+            Returns:
+                None.
+    """
     for flow in flows:
         dag_id = str(flow)
         work_flow_id = "wf_" + flow[3:]
@@ -65,6 +94,11 @@ def generate_control_flows(flows: list[str]) -> None:
 
 
 def generate_work_flows() -> None:
+    """
+            Создает рабочие потоки из списка потоков.
+            Returns:
+                None.
+    """
     rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
     for row in range(len(rows)):
         flow = rows["Flows"][row]
@@ -82,6 +116,11 @@ def generate_work_flows() -> None:
 
 
 def generate_db_table() -> None:
+    """
+            Создает маппинги таблицы приемника.
+            Returns:
+                None.
+    """
     rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
     for row in rows.itertuples(index=False):
         name = row[0][12:]
@@ -95,6 +134,9 @@ def generate_db_table() -> None:
 
 
 def main():
+    """
+        Запускает функции генерации
+    """
     clear([cf_output, wf_init_output, db_output])
     flows = parse_excel(input_data)
     generate_control_flows(flows)
