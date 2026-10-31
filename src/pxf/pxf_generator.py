@@ -49,7 +49,7 @@ def clear(output: list[str]) -> None:
     log.info(f"Директории созданы: {cf_output}, {db_output}, {wf_init_output}")
 
 
-def parse_excel(filepath: str, sheet_name='Sheet1') -> list[str]:
+def parse_excel(filepath: str, sheet_name='Sheet1') -> dict[str, str]:
     """
         Парсит excel файл и возвращает список наименований потоков.
         Args:
@@ -59,71 +59,70 @@ def parse_excel(filepath: str, sheet_name='Sheet1') -> list[str]:
         Returns:
             list[str].
     """
-    df = pd.read_excel(filepath, sheet_name)
+    rows = pd.read_excel(filepath, sheet_name)
     log.info("Список потоков для перевода на шаблон yaml:")
-    [log.info(x) for x in df["Flows"]]
-    return df["Flows"].tolist()
+    [log.info(x) for x in rows["Flows"]]
+    flows = {}
+    for row in range(len(rows)):
+        flows.setdefault(rows["Flows"][row], rows["Schema"][row])
+    return flows
 
 
-def generate_control_flows(flows: list[str]) -> None:
+def generate_control_flows(flows: dict[str, str]) -> None:
     """
-            Создает управляющие потоки из списка потоков.
+            Создает управляющие потоки из словаря потоков.
             Args:
                 flows: Список наименований потоков, которые будут созданы
 
             Returns:
                 None.
     """
-    for flow in flows:
-        dag_id = str(flow)
+    for flow, schema in flows.items():
         work_flow_id = "wf_" + flow[3:]
-        target = "mrod"
-        index = str(flow).find(target)
+        index = flow.find("mrod")
         if index != -1:
-            algos_map, algos_map_uni, algos_map_ceh = (str(flow)[index:],
-                                                       "tseh.public." + str(flow)[index:],
-                                                       "ceh.rd_rawd." + str(flow)[index:])
-        with open(f"{cf_output}/{flow}.yaml", "w+", encoding="utf-8") as f:
+            algos_map, algos_map_uni, algos_map_ceh = (flow[index:],
+                                                       str(flow)[index:],
+                                                       schema + "." + "mart_" + str(flow)[index:])
+        with open(f"{cf_output}{flow}.yaml", "w+", encoding="utf-8") as f:
             f.write(str(cf_template.render(
-                dag_id=dag_id,
+                dag_id=flow,
                 work_flow_id=work_flow_id,
                 algos_map=algos_map,
                 algos_map_uni=algos_map_uni,
                 algos_map_ceh=algos_map_ceh
             )))
+            log.info(f"Создан файл: {f.name}")
 
 
-def generate_work_flows() -> None:
+def generate_work_flows(flows: dict[str, str]) -> None:
     """
             Создает рабочие потоки из списка потоков.
             Returns:
                 None.
     """
-    rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
-    for row in range(len(rows)):
-        flow = rows["Flows"][row]
-        index = str(rows["Flows"][row]).find("mrod_")  # 12
+    for flow, schema in flows.items():
+        index = flow.find("mrod")  # 12
         table_name = str(flow)[index:]
-        table_schema = rows["Schema"][row]
         with open(f"{wf_init_output}wf_raw_data_{table_name}_init.yaml", "w+") as f:
             f.write(
                 wf_template.render(
                     table_name=table_name,
-                    table_schema=table_schema,
+                    table_schema=schema,
                     table_name_upper=str(table_name).upper()
                 )
             )
+            log.info(f"Создан файл: {f.name}")
 
 
-def generate_db_table() -> None:
+def generate_db_table(flows: dict[str, str]) -> None:
     """
             Создает маппинги таблицы приемника.
             Returns:
                 None.
     """
-    rows = pd.read_excel("src/pxf/input_data/cf_list.xlsx")
-    for row in rows.itertuples(index=False):
-        name = row[0][12:]
+    for flow in flows.items():
+        name = flow[0][12:]
         with open(f"{db_output}{name}_get_raw_data_init_yaml.yaml", "w+") as f:
             f.write(
                 db_template.render(
@@ -131,6 +130,7 @@ def generate_db_table() -> None:
                     mrod_table_name=str.upper(name[5:])
                 )
             )
+            log.info(f"Создан файл: {f.name}")
 
 
 def main():
@@ -140,8 +140,8 @@ def main():
     clear([cf_output, wf_init_output, db_output])
     flows = parse_excel(input_data)
     generate_control_flows(flows)
-    generate_work_flows()
-    generate_db_table()
+    generate_work_flows(flows)
+    generate_db_table(flows)
 
 
 if __name__ == "__main__":

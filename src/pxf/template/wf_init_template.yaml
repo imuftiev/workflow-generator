@@ -15,7 +15,7 @@ targets:
   - short_name: mart_fct_i_p
     schema: {{ table_schema }}
     table: mart_mrod_get_raw_data
-    resource_cd: ceh.rd_rawd.mart_{{table_name}}
+    resource_cd: ceh.{{ table_schema }}.mart_{{table_name}}
 local_metrics:
   wf_max_date_to:
     target: stage_T_input

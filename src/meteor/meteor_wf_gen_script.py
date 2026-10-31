@@ -21,16 +21,16 @@ logger.setLevel(logging.INFO)
 
 
 # 'excel'-файл со всеми требованиями и маппингами
-input_data = os.getenv("INPUT_DATA")
+input_data = "D:\\PycharmProjects\\flowgen-script\\src\\meteor\\input_data\\mrod_template\\input_data.xlsx"
 
 # Директория с выводом потоков
-output_data = os.getenv("OUTPUT_DATA")
+output_data = "D:\\PycharmProjects\\flowgen-script\\src\\meteor\\output_data\\"
 
 mart_list: list[dict] = []
 wf_list = []
 table_list = []
 
-file_template = FileSystemLoader(os.getenv("TEMPLATE_DIRECTORY"))
+file_template = FileSystemLoader("D:\\PycharmProjects\\flowgen-script\\src\\meteor\\template\\mrod_s3_template")
 
 jinja_env = Environment(loader=file_template)
 

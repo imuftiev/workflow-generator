@@ -25,9 +25,9 @@ flows:
       - name: algos_map
         default: {{ algos_map }}
       - name: source_resource_names
-        default: {{ algos_map_uni }}
+        default: tseh.public.{{ algos_map_uni }}
       - name: target_resource_name
-        default: {{ algos_map_ceh }}
+        default: ceh.{{ algos_map_ceh }}
     tasks:
       - id: run_wf
         builder: ceh_core_idl.app.builders.include_flow_builder
@@ -38,7 +38,7 @@ flows:
             work_flow_id: ${wf_name_increment}
             init_work_flow_id: ${wf_name_init}
             wf_metric: wf_max_date_to
-            cf_metric: dataset_max_date_to
+            cf_metric: wf_max_date_to
             init_metric: src_init_load_date
             default_value: "1899-12-31T23:59:59"
             actual_dttm_prefix: 'tseh'
