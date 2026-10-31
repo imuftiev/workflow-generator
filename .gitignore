@@ -10,3 +10,4 @@ src/pxf/input_data/
 src/pxf/__pycache__/
 .pyc
 site/
+output_data/
