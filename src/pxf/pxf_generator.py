@@ -4,12 +4,12 @@ from jinja2 import Environment, FileSystemLoader
 import logging
 
 # Название excel-файла, список потоков
-excel_file = "cf_list"
+excel_file = 'cf_list'
 
-input_data = f"src/pxf/input_data/{excel_file}.xlsx"
-cf_output = "src/pxf/output_data/cf/"
-db_output = "src/pxf/output_data/db_table/"
-wf_init_output = "src/pxf/output_data/wf_init/"
+input_data = f'src/pxf/input_data/{excel_file}.xlsx'
+cf_output = 'src/pxf/output_data/cf/'
+db_output = 'src/pxf/output_data/db_table/'
+wf_init_output = 'src/pxf/output_data/wf_init/'
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -46,7 +46,7 @@ def clear(output: list[str]) -> None:
         if os.path.exists(directory):
             shutil.rmtree(directory)
         os.makedirs(directory, exist_ok=True)
-    log.info(f"Директории созданы: {cf_output}, {db_output}, {wf_init_output}")
+        log.info(f'Директория создана: {directory}')
 
 
 def parse_excel(filepath: str, sheet_name='Sheet1') -> dict[str, str]:
@@ -79,7 +79,7 @@ def generate_control_flows(flows: dict[str, str]) -> None:
     """
     for flow, schema in flows.items():
         work_flow_id = "wf_" + flow[3:]
-        index = flow.find("mrod")
+        index = flow.find("mrod_s3")
         if index != -1:
             algos_map, algos_map_uni, algos_map_ceh = (flow[index:],
                                                        str(flow)[index:],
@@ -102,7 +102,7 @@ def generate_work_flows(flows: dict[str, str]) -> None:
                 None.
     """
     for flow, schema in flows.items():
-        index = flow.find("mrod")  # 12
+        index = flow.find("mrod_s3")  # 12
         table_name = str(flow)[index:]
         with open(f"{wf_init_output}wf_raw_data_{table_name}_init.yaml", "w+") as f:
             f.write(
@@ -133,7 +133,7 @@ def generate_db_table(flows: dict[str, str]) -> None:
             log.info(f"Создан файл: {f.name}")
 
 
-def main():
+def main() -> None:
     """
         Запускает функции генерации
     """

@@ -27,7 +27,7 @@ flows:
       - name: source_resource_names
         default: tseh.public.{{ algos_map_uni }}
       - name: target_resource_name
-        default: ceh.{{ algos_map_ceh }}
+        default: ceh_resource.{{ algos_map_ceh }}
     tasks:
       - id: run_wf
         builder: ceh_core_idl.app.builders.include_flow_builder
