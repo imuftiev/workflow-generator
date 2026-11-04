@@ -1,7 +1,7 @@
 .venv
 .idea
 src/meteor/input_data/
-src/meteor/template/
+src/meteor/2204/template/
 src/meteor/output_data/
 src/pxf/output_data/
 src/pxf/input_data/
@@ -11,3 +11,5 @@ src/pxf/__pycache__/
 .pyc
 site/
 output_data/
+input_data.xlsx
+template/
