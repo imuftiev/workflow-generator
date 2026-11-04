@@ -1,15 +1,19 @@
+import json
 import os, shutil
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 import logging
 
 # Название excel-файла, список потоков
-excel_file = 'cf_list'
+excel_file = 'input_data'
 
-input_data = f'src/pxf/input_data/{excel_file}.xlsx'
-cf_output = 'src/pxf/output_data/cf/'
-db_output = 'src/pxf/output_data/db_table/'
-wf_init_output = 'src/pxf/output_data/wf_init/'
+input_data = f'input_data/{excel_file}.xlsx'
+cf_output = 'output_data/cf/'
+ceh_resource_output = 'output_data/ceh_resource/'
+uni_resource_output = 'output_data/uni_resource/'
+db_output = 'output_data/db_table/'
+wf_init_output = 'output_data/wf_init/'
+wf_output = 'output_data/wf/'
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
@@ -21,12 +25,16 @@ log_stream.setFormatter(formatter)
 
 log.addHandler(log_stream)
 
-file_template = FileSystemLoader("src/pxf/template")
+file_template = FileSystemLoader("template")
 env = Environment(loader=file_template)
 
 cf_template = env.get_template("cf_mrod_flow_template.yaml")
 db_template = env.get_template("db_table_template.yaml")
-wf_template = env.get_template("wf_init_template.yaml")
+wf_template_py = env.get_template("wf_template.txt")
+wf_template_yaml = env.get_template("wf_template.yaml")
+wf_init_template = env.get_template("wf_init_template.yaml")
+ceh_resource_template = env.get_template("ceh_resource_template.json")
+uni_resource_template = env.get_template("uni_resource_template.json")
 
 
 def clear(output: list[str]) -> None:
@@ -59,89 +67,93 @@ def parse_excel(filepath: str, sheet_name='Sheet1') -> dict[str, str]:
         Returns:
             list[str].
     """
-    rows = pd.read_excel(filepath, sheet_name)
+    flows_df = pd.read_excel(filepath, sheet_name)
     log.info("Список потоков для перевода на шаблон yaml:")
-    [log.info(x) for x in rows["Flows"]]
+    [log.info(x) for x in flows_df['workflow']]
     flows = {}
-    for row in range(len(rows)):
-        flows.setdefault(rows["Flows"][row], rows["Schema"][row])
+    for row in range(len(flows_df)):
+        workflow = flows.setdefault(flows_df['table'][row], {})
+        workflow.setdefault('controlflow', flows_df['controlflow'][row])
+        workflow.setdefault('workflow', flows_df['workflow'][row])
+        workflow.setdefault('schema', flows_df['schema'][row])
+        flows.setdefault(flows_df['table'][row], workflow)
     return flows
 
 
-def generate_control_flows(flows: dict[str, str]) -> None:
-    """
-            Создает управляющие потоки из словаря потоков.
-            Args:
-                flows: Список наименований потоков, которые будут созданы
+def generate_objects(flows: dict) -> None:
+    for flow in flows:
+        controlflow = flows[flow]['controlflow']
+        workflow = flows[flow]['workflow']
+        schema = flows[flow]['schema']
+        table = flow
 
-            Returns:
-                None.
-    """
-    for flow, schema in flows.items():
-        work_flow_id = "wf_" + flow[3:]
-        index = flow.find("mrod_s3")
-        if index != -1:
-            algos_map, algos_map_uni, algos_map_ceh = (flow[index:],
-                                                       str(flow)[index:],
-                                                       schema + "." + "mart_" + str(flow)[index:])
-        with open(f"{cf_output}{flow}.yaml", "w+", encoding="utf-8") as f:
-            f.write(str(cf_template.render(
-                dag_id=flow,
-                work_flow_id=work_flow_id,
-                algos_map=algos_map,
-                algos_map_uni=algos_map_uni,
-                algos_map_ceh=algos_map_ceh
-            )))
-            log.info(f"Создан файл: {f.name}")
-
-
-def generate_work_flows(flows: dict[str, str]) -> None:
-    """
-            Создает рабочие потоки из списка потоков.
-            Returns:
-                None.
-    """
-    for flow, schema in flows.items():
-        index = flow.find("mrod_s3")  # 12
-        table_name = str(flow)[index:]
-        with open(f"{wf_init_output}wf_raw_data_{table_name}_init.yaml", "w+") as f:
-            f.write(
-                wf_template.render(
-                    table_name=table_name,
-                    table_schema=schema,
-                    table_name_upper=str(table_name).upper()
+        with open(cf_output + controlflow + '.yaml', 'w+', encoding='utf-8') as cf:
+            cf.write(
+                cf_template.render(
+                    controlflow=controlflow,
+                    workflow=workflow,
+                    schema=schema,
+                    table=table
                 )
             )
-            log.info(f"Создан файл: {f.name}")
 
+        with open(wf_output + workflow + '.yaml', 'w+', encoding='utf-8') as wf:
+            wf.write(
+                wf_template_yaml.render(
+                    workflow=workflow,
+                    schema=schema,
+                    table=table
+                )
+            )
 
-def generate_db_table(flows: dict[str, str]) -> None:
-    """
-            Создает маппинги таблицы приемника.
-            Returns:
-                None.
-    """
-    for flow in flows.items():
-        name = flow[0][12:]
-        with open(f"{db_output}{name}_get_raw_data_init_yaml.yaml", "w+") as f:
-            f.write(
+        with open(ceh_resource_output + 'ceh.' + schema + ".mart_mrod_" + table + '.json', 'w+',
+                  encoding='utf-8') as ceh_resource:
+            ceh_resource.write(
+                ceh_resource_template.render(
+                    schema=schema,
+                    table=table
+                )
+            )
+        with open(uni_resource_output + 'tseh.public.mrod_' + table + '.json', 'w+', encoding='utf-8') as uni_resource:
+            uni_resource.write(
+                uni_resource_template.render(
+                    schema=schema,
+                    table=table
+                )
+            )
+
+        with open(db_output + table + '_get_raw_data_init_yaml.yaml', 'w+', encoding='utf-8') as db_table:
+            db_table.write(
                 db_template.render(
-                    db_table_name=name,
-                    mrod_table_name=str.upper(name[5:])
+                    table=table
                 )
             )
-            log.info(f"Создан файл: {f.name}")
+
+        with open(wf_init_output + workflow + '_init.yaml', 'w+', encoding='utf-8') as wf_init_yml:
+            wf_init_yml.write(
+                wf_init_template.render(
+                    workflow=workflow,
+                    schema=schema,
+                    table=table
+                )
+            )
+
+        with open(wf_output + workflow + '.py', 'w+', encoding='utf-8') as wf_py:
+            wf_py.write(
+                wf_template_py.render()
+            )
+        with open(wf_output + workflow + '_init.py', 'w+', encoding='utf-8') as wf_init_py:
+            wf_init_py.write(
+                wf_template_py.render()
+            )
 
 
 def main() -> None:
     """
         Запускает функции генерации
     """
-    clear([cf_output, wf_init_output, db_output])
-    flows = parse_excel(input_data)
-    generate_control_flows(flows)
-    generate_work_flows(flows)
-    generate_db_table(flows)
+    clear([cf_output, wf_init_output, db_output, wf_output, ceh_resource_output, uni_resource_output])
+    generate_objects(parse_excel(input_data))
 
 
 if __name__ == "__main__":

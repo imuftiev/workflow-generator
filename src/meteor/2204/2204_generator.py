@@ -22,7 +22,7 @@ ddl_output = 'output_data/ddl/'
 dir_template = FileSystemLoader('template')
 env = Environment(loader=dir_template)
 
-wf_template = env.get_template('wf_fm_template.yaml')
+wf_template = env.get_template('wf_init_template.yaml')
 mart_template = env.get_template('mart_ceh_template.yaml')
 uni_template = env.get_template('db_table_template.yaml')
 ceh_resource_template = env.get_template('ceh_resource_template.json')

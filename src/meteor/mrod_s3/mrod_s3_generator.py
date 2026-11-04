@@ -1,3 +1,4 @@
+import json
 import os.path
 from logging import StreamHandler
 import logging
@@ -18,12 +19,14 @@ log.addHandler(sh)
 input_data = 'input_data/input_data.xlsx'
 dir_template = FileSystemLoader('template/')
 env = Environment(loader=dir_template)
-wf_template = env.get_template('wf_fm_template.yaml')
+wf_template = env.get_template('wf_init_template.yaml')
 ceh_resource_template = env.get_template('ceh_resource_template.json')
 uni_resource_template = env.get_template('uni_resource_template.json')
+ddl_template = env.get_template('ddl_template.sql')
 wf_output = 'output_data/wf/'
 ceh_output = 'output_data/ceh_resource/'
 uni_output = 'output_data/uni_resource/'
+ddl_output = 'output_data/ddl/'
 
 
 def clear(output: list[str]) -> None:
@@ -41,16 +44,25 @@ def clear(output: list[str]) -> None:
 
 def parse_excel(path: str) -> dict:
     """
-        Создает рабочие потоки из списка потоков.
+        Функция парсинга excel файла с наименованиями и атрибутами потоков
         Returns:
-            dict.
+            dict
     """
     flows = {}
-    rows = pd.read_excel(path, sheet_name='Sheet1')
-    log.info("Список потоков для перевода на шаблон yaml:")
-    [log.info(row) for row in rows["workflow"]]
-    for row in range(len(rows)):
-        flows.setdefault(rows["workflow"][row], rows["table"][row])
+    flows_df = pd.read_excel(path, sheet_name='Sheet1')
+    for row in range(len(flows_df)):
+        workflow = flows.setdefault(flows_df['workflow'][row], {})
+        workflow.setdefault('schema', flows_df['schema'][row].strip())
+        workflow.setdefault('table', flows_df['table'][row].strip())
+
+        data = workflow.setdefault('data', {})
+        data.setdefault(flows_df['attribute'][row], flows_df['type'][row])
+
+        flows.setdefault(flows_df['workflow'][row], workflow)
+    log.info(f'Всего объектов к генерации: {len(flows)}')
+    [log.info(flow) for flow in flows.keys()]
+    log.info('Структура потока(-ов):')
+    log.info(json.dumps(flows, indent=4))
     return flows
 
 
@@ -60,32 +72,46 @@ def generate_objects(flows: dict) -> None:
         Returns:
             None
     """
-    for flow, table in flows.items():
+    for flow in flows:
+        table = flows[flow]['table']
+        schema = flows[flow]['schema']
+        data = flows[flow]['data']
         with open(wf_output + flow + '.yaml', 'w+', encoding='utf-8') as wf:
             wf.write(
                 wf_template.render(
-                    wf_name=flow,
-                    wf_tag=flow,
-                    table_name=table,
-                    table_name_upper=table.upper()
+                    workflow=flow,
+                    tag=flow,
+                    schema=schema,
+                    table=table,
+                    table_uppercase=table.upper()
                 )
             )
             log.info(f'Создан файл: {wf.name}')
-        with open(ceh_output + 'ceh_resource.rd_rawd.mrod_' + table + '.json', 'w+', encoding='utf-8') as ceh:
+        with open(ceh_output + 'ceh.' + schema + '.mrod_' + table + '.json', 'w+', encoding='utf-8') as ceh:
             ceh.write(
                 ceh_resource_template.render(
-                    table_name=table
+                    table=table,
+                    schema=schema
                 )
             )
             log.info(f'Создан файл: {ceh.name}')
         with open(uni_output + 'tseh.public.mrod_' + table + '.json', 'w+', encoding='utf-8') as uni:
             uni.write(
                 uni_resource_template.render(
-                    table_name=table,
-                    table_name_uppercase=table.upper()
+                    table=table,
+                    table_uppercase=table.upper()
                 )
             )
             log.info(f'Создан файл: {uni.name}')
+        with open(ddl_output + table + '.sql', 'w+', encoding='utf-8') as ddl:
+            ddl.write(
+                ddl_template.render(
+                    table=table,
+                    schema=schema,
+                    data=data.items()
+                )
+            )
+            log.info(f'Создан файл: {ddl.name}')
 
 
 def main() -> None:
