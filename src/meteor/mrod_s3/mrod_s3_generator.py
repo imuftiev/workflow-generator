@@ -16,17 +16,17 @@ sh.setFormatter(formatter)
 
 log.addHandler(sh)
 
-input_data = 'input_data/input_data.xlsx'
+input_data = 'input/input.xlsx'
 dir_template = FileSystemLoader('template/')
 env = Environment(loader=dir_template)
 wf_template = env.get_template('wf_init_template.yaml')
 ceh_resource_template = env.get_template('ceh_resource_template.json')
 uni_resource_template = env.get_template('uni_resource_template.json')
 ddl_template = env.get_template('ddl_template.sql')
-wf_output = 'output_data/wf/'
-ceh_output = 'output_data/ceh_resource/'
-uni_output = 'output_data/uni_resource/'
-ddl_output = 'output_data/ddl/'
+wf_output = 'output/wf/'
+ceh_output = 'output/ceh_resource/'
+uni_output = 'output/uni_resource/'
+ddl_output = 'output/ddl/'
 
 
 def clear(output: list[str]) -> None:

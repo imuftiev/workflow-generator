@@ -10,6 +10,7 @@ src/pxf/input_data/
 src/pxf/__pycache__/
 .pyc
 site/
-output_data/
+src/pxf/output/
 input_data.xlsx
 template/
+.DS_Store
