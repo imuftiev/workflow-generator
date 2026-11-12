@@ -11,13 +11,13 @@ sh = logging.StreamHandler()
 sh.setFormatter(formatter)
 log.addHandler(sh)
 
-input_data = 'input_data/input_data.xlsx'
-wf_output = 'output_data/wf/'
-ceh_output = 'output_data/ceh/'
-uni_output = 'output_data/db_table/'
-ceh_resource_output = 'output_data/ceh_resource/'
-uni_resource_output = 'output_data/uni_resource/'
-ddl_output = 'output_data/ddl/'
+input_data = 'input/input.xlsx'
+wf_output = 'output/wf/'
+ceh_output = 'output/ceh/'
+uni_output = 'output/db_table/'
+ceh_resource_output = 'output/ceh_resource/'
+uni_resource_output = 'output/uni_resource/'
+ddl_output = 'output/ddl/'
 
 dir_template = FileSystemLoader('template')
 env = Environment(loader=dir_template)
